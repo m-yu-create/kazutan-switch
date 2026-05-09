@@ -40,6 +40,7 @@ let state = {
   members: {},   // {id: {name, emoji}}
   buttons: {},   // {id: {label, emoji, order}}
   records: {},   // {id: {memberId, buttonId, timestamp}}
+  tokens: {},    // {token: {memberId, deviceLabel, updated}}
   currentSenderId: null,
 };
 
@@ -165,6 +166,7 @@ async function initApp() {
     renderMembers();
     renderSenderSelect();
     renderFilters();
+    renderNotifSection();
   });
   db.ref('buttons').on('value', snap => {
     state.buttons = snap.val() || {};
@@ -179,12 +181,16 @@ async function initApp() {
       renderAnalytics();
     }
   });
+  db.ref('tokens').on('value', snap => {
+    state.tokens = snap.val() || {};
+    renderNotifSection();
+  });
 
   // 既存に何もなければデフォルトを投入
   setTimeout(seedDefaultsIfEmpty, 800);
 
-  // 通知ステータス更新
-  updateNotifStatus();
+  // 通知トークンの自動更新（既に登録済みなら静かに更新）
+  setTimeout(autoRefreshToken, 1500);
 }
 
 async function seedDefaultsIfEmpty() {
@@ -693,59 +699,231 @@ function renderCombos() {
 }
 
 // ===========================
-// 通知
+// 通知（新仕様）
+// データ構造: tokens/{token} = { memberId, deviceLabel, updated }
 // ===========================
-function updateNotifStatus() {
-  const status = document.getElementById('notifStatus');
-  const text = document.getElementById('notifStatusText');
-  const btn = document.getElementById('enableNotifBtn');
 
-  if (!('Notification' in window)) {
-    text.textContent = 'このブラウザは通知に対応していません';
-    btn.style.display = 'none';
-    return;
+// この端末のラベル（OS情報から推測）
+function getDeviceLabel() {
+  const ua = navigator.userAgent;
+  if (/iPhone/.test(ua)) return 'iPhone';
+  if (/iPad/.test(ua)) return 'iPad';
+  if (/Android/.test(ua)) return 'Android';
+  if (/Mac/.test(ua)) return 'Mac';
+  if (/Windows/.test(ua)) return 'Windows';
+  return 'その他';
+}
+
+// この端末で取得したトークンを localStorage に保存
+function saveLocalToken(token) {
+  localStorage.setItem('fcmToken', token);
+}
+function getLocalToken() {
+  return localStorage.getItem('fcmToken');
+}
+
+// この端末が紐づいているメンバーID
+function getLocalNotifMemberId() {
+  return localStorage.getItem('notifMemberId');
+}
+function saveLocalNotifMemberId(mid) {
+  localStorage.setItem('notifMemberId', mid);
+}
+
+// トークンを取得して登録（自動更新も兼ねる）
+async function registerToken(memberId, silent = false) {
+  if (!messaging) {
+    if (!silent) showToast('このブラウザは通知非対応');
+    return null;
   }
-  if (Notification.permission === 'granted') {
-    status.classList.add('on');
-    text.textContent = '通知はオンです ✅';
-    btn.textContent = '通知を再登録する';
-  } else if (Notification.permission === 'denied') {
-    text.textContent = '通知がブロックされています';
-    btn.textContent = 'ブラウザの設定から許可してください';
-  } else {
-    text.textContent = '通知はオフです';
-    btn.textContent = '通知を有効にする';
+  if (Notification.permission !== 'granted') {
+    if (!silent) showToast('通知許可がありません');
+    return null;
+  }
+  try {
+    const token = await messaging.getToken({ vapidKey: VAPID_KEY });
+    if (!token) return null;
+
+    // 古いトークン（同じ端末で別メンバーに紐づいてた場合）を削除
+    const oldToken = getLocalToken();
+    if (oldToken && oldToken !== token) {
+      await db.ref(`tokens/${oldToken}`).remove();
+    }
+
+    // 新しいトークンを保存
+    await db.ref(`tokens/${token}`).set({
+      memberId: memberId,
+      deviceLabel: getDeviceLabel(),
+      updated: Date.now(),
+    });
+    saveLocalToken(token);
+    saveLocalNotifMemberId(memberId);
+
+    if (!silent) {
+      const m = state.members[memberId];
+      showToast(`${m ? m.emoji + m.name : ''} の端末として登録 🔔`);
+    }
+    return token;
+  } catch (e) {
+    console.error('registerToken error:', e);
+    if (!silent) showToast('通知登録エラー');
+    return null;
   }
 }
 
-document.getElementById('enableNotifBtn').addEventListener('click', async () => {
-  if (!messaging) { showToast('このブラウザは非対応です'); return; }
-  try {
-    const permission = await Notification.requestPermission();
-    if (permission !== 'granted') { showToast('通知が許可されませんでした'); updateNotifStatus(); return; }
+// アプリ起動時の自動更新
+async function autoRefreshToken() {
+  if (!messaging) return;
+  if (Notification.permission !== 'granted') return;
+  const memberId = getLocalNotifMemberId();
+  if (!memberId) return;
+  // メンバーがまだ存在するか確認
+  if (!state.members[memberId]) return;
+  // 静かにトークンを更新
+  await registerToken(memberId, true);
+  console.log('Token auto-refreshed.');
+}
 
-    const token = await messaging.getToken({ vapidKey: VAPID_KEY });
-    if (token) {
-      // メンバーに紐づける（送信者ではなく、その端末を使う人として保存）
-      // 簡易仕様：現在の送信者IDに紐づける
-      const sid = state.currentSenderId;
-      if (sid) {
-        await db.ref(`tokens/${sid}/${token}`).set({ updated: Date.now() });
-        showToast('通知を有効にしました 🔔');
-      } else {
-        // メンバー未選択でもグローバルに保存
-        await db.ref(`tokens/_unassigned/${token}`).set({ updated: Date.now() });
-        showToast('通知を有効にしました（メンバー未指定）');
-      }
-    }
-  } catch (e) {
-    console.error(e);
-    showToast('通知設定でエラー');
+// この端末の通知を解除
+async function unregisterThisDevice() {
+  const token = getLocalToken();
+  if (token) {
+    await db.ref(`tokens/${token}`).remove();
   }
-  updateNotifStatus();
-});
+  localStorage.removeItem('fcmToken');
+  localStorage.removeItem('notifMemberId');
+  showToast('この端末の通知を解除しました');
+  renderNotifSection();
+}
 
-// フォアグラウンド受信時のハンドリング
+// ステータス表示
+function renderNotifSection() {
+  const text = document.getElementById('notifStatusText');
+  const dot = document.querySelector('#notifStatus .dot');
+  const status = document.getElementById('notifStatus');
+
+  if (!('Notification' in window) || !messaging) {
+    text.textContent = 'このブラウザは通知に対応していません';
+    document.getElementById('notifMemberPicker').style.display = 'none';
+    document.getElementById('notifDeviceList').style.display = 'none';
+    return;
+  }
+
+  // パーミッション状態
+  if (Notification.permission === 'denied') {
+    status.classList.remove('on');
+    text.textContent = '⚠️ ブラウザで通知がブロックされています。設定から許可してください';
+  } else if (Notification.permission === 'granted') {
+    const memberId = getLocalNotifMemberId();
+    const m = memberId ? state.members[memberId] : null;
+    if (m) {
+      status.classList.add('on');
+      text.textContent = `この端末は「${m.emoji}${m.name}」として登録中 ✅`;
+    } else {
+      status.classList.remove('on');
+      text.textContent = '通知許可済み・メンバー未登録';
+    }
+  } else {
+    status.classList.remove('on');
+    text.textContent = 'この端末は通知オフです';
+  }
+
+  // メンバー選択UI
+  renderNotifMemberPicker();
+  // 登録済み端末リスト
+  renderNotifDeviceList();
+}
+
+function renderNotifMemberPicker() {
+  const wrap = document.getElementById('notifMemberPicker');
+  const memberIds = Object.keys(state.members);
+  if (memberIds.length === 0) {
+    wrap.innerHTML = '<p style="font-size:13px;color:var(--text-light);margin:8px 0">メンバーを追加してください</p>';
+    return;
+  }
+  const currentMid = getLocalNotifMemberId();
+  wrap.innerHTML = `
+    <div class="notif-picker-label">📱 この端末は誰のですか？</div>
+    <div class="notif-tabs">
+      ${memberIds.map(id => {
+        const m = state.members[id];
+        const active = id === currentMid ? 'active' : '';
+        return `<button class="notif-tab ${active}" data-mid="${id}">${m.emoji} ${escapeHtml(m.name)}</button>`;
+      }).join('')}
+    </div>
+    <button class="notif-btn-primary" id="notifEnableBtn">
+      ${currentMid ? '🔔 この端末で通知を再登録する' : '🔔 この端末で通知を有効にする'}
+    </button>
+    ${currentMid ? '<button class="notif-btn-secondary" id="notifDisableBtn">この端末の通知を解除</button>' : ''}
+  `;
+
+  // タブ選択
+  let selectedMid = currentMid || memberIds[0];
+  wrap.querySelectorAll('.notif-tab').forEach(t => {
+    t.addEventListener('click', () => {
+      wrap.querySelectorAll('.notif-tab').forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      selectedMid = t.dataset.mid;
+    });
+  });
+
+  document.getElementById('notifEnableBtn').addEventListener('click', async () => {
+    if (!selectedMid) { showToast('メンバーを選んでね'); return; }
+    // 許可リクエスト → トークン登録
+    if (Notification.permission !== 'granted') {
+      const p = await Notification.requestPermission();
+      if (p !== 'granted') { showToast('通知が許可されませんでした'); return; }
+    }
+    await registerToken(selectedMid);
+    renderNotifSection();
+  });
+
+  const disableBtn = document.getElementById('notifDisableBtn');
+  if (disableBtn) {
+    disableBtn.addEventListener('click', unregisterThisDevice);
+  }
+}
+
+function renderNotifDeviceList() {
+  const wrap = document.getElementById('notifDeviceList');
+  // tokensから登録済み端末を取得
+  if (!state.tokens) {
+    wrap.innerHTML = '';
+    return;
+  }
+  const entries = Object.entries(state.tokens);
+  if (entries.length === 0) {
+    wrap.innerHTML = '<p style="font-size:12px;color:var(--text-light);margin:8px 0">まだ登録された端末がありません</p>';
+    return;
+  }
+  // メンバーごとにグループ化
+  const byMember = {};
+  entries.forEach(([token, info]) => {
+    const mid = info.memberId || '_unassigned';
+    if (!byMember[mid]) byMember[mid] = [];
+    byMember[mid].push({ token, ...info });
+  });
+  const localToken = getLocalToken();
+  let html = '<div class="notif-picker-label" style="margin-top:14px">📱 登録済み端末</div>';
+  Object.entries(byMember).forEach(([mid, devices]) => {
+    const m = state.members[mid];
+    const memberName = m ? `${m.emoji} ${m.name}` : '（不明なメンバー）';
+    html += `<div class="device-group">
+      <div class="device-group-name">${escapeHtml(memberName)}</div>`;
+    devices.forEach(d => {
+      const isThis = d.token === localToken;
+      const updated = d.updated ? new Date(d.updated).toLocaleDateString('ja-JP') : '?';
+      html += `<div class="device-item">
+        <span>📱 ${escapeHtml(d.deviceLabel || '不明')}</span>
+        <span class="device-meta">${updated}${isThis ? ' ・<b>この端末</b>' : ''}</span>
+      </div>`;
+    });
+    html += '</div>';
+  });
+  wrap.innerHTML = html;
+}
+
+// フォアグラウンド受信
 if (messaging) {
   messaging.onMessage(payload => {
     const title = payload?.notification?.title || '新しいおしらせ';

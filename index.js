@@ -1,28 +1,35 @@
 /**
- * かずたんすいっち - Firebase Functions
+ * かずたんすいっち - Firebase Functions (v2 SDK)
  *
  * records に新規レコードが追加されたとき、
  * 送信者以外のメンバーに紐づく全トークンに通知を送る。
+ *
+ * データ構造 (新): tokens/{token} = { memberId, deviceLabel, updated }
  */
 
-const functions = require('firebase-functions');
-const admin = require('firebase-admin');
+const { onValueCreated } = require('firebase-functions/v2/database');
+const { initializeApp } = require('firebase-admin/app');
+const { getDatabase } = require('firebase-admin/database');
+const { getMessaging } = require('firebase-admin/messaging');
 
-admin.initializeApp();
+initializeApp();
 
-exports.notifyOnNewRecord = functions.database
-  .ref('/records/{recordId}')
-  .onCreate(async (snap, context) => {
-    const record = snap.val();
+exports.notifyOnNewRecord = onValueCreated(
+  {
+    ref: '/records/{recordId}',
+    region: 'asia-southeast1',
+  },
+  async (event) => {
+    const record = event.data.val();
     if (!record) return null;
 
-    const { memberId, buttonId, timestamp } = record;
+    const { memberId, buttonId } = record;
 
-    // メンバー情報を取得
+    const db = getDatabase();
     const [membersSnap, buttonsSnap, tokensSnap] = await Promise.all([
-      admin.database().ref('/members').once('value'),
-      admin.database().ref('/buttons').once('value'),
-      admin.database().ref('/tokens').once('value'),
+      db.ref('/members').once('value'),
+      db.ref('/buttons').once('value'),
+      db.ref('/tokens').once('value'),
     ]);
 
     const members = membersSnap.val() || {};
@@ -40,11 +47,19 @@ exports.notifyOnNewRecord = functions.database
     const title = `${button.emoji} ${button.label}`;
     const body = `${senderName}から届いたよ`;
 
-    // 送信者以外のメンバーのトークンを集める
+    // 送信者以外のトークンを集める（新仕様優先・旧仕様互換）
     const tokenList = [];
-    Object.entries(allTokens).forEach(([mid, tokensMap]) => {
-      if (mid === memberId) return; // 送信者自身はスキップ
-      Object.keys(tokensMap || {}).forEach(t => tokenList.push(t));
+    Object.entries(allTokens).forEach(([key, value]) => {
+      if (value && typeof value === 'object' && value.memberId !== undefined) {
+        // 新仕様: tokens/{token} = { memberId, ... }
+        if (value.memberId !== memberId) tokenList.push(key);
+        return;
+      }
+      // 旧仕様: tokens/{memberId}/{token} = {...}
+      if (key === memberId) return;
+      if (value && typeof value === 'object') {
+        Object.keys(value).forEach(t => tokenList.push(t));
+      }
     });
 
     if (tokenList.length === 0) {
@@ -52,7 +67,6 @@ exports.notifyOnNewRecord = functions.database
       return null;
     }
 
-    // 重複除去
     const tokens = [...new Set(tokenList)];
 
     const message = {
@@ -61,7 +75,7 @@ exports.notifyOnNewRecord = functions.database
     };
 
     try {
-      const response = await admin.messaging().sendEachForMulticast(message);
+      const response = await getMessaging().sendEachForMulticast(message);
       console.log(`Sent: ${response.successCount} / ${tokens.length}`);
 
       // 失敗トークンは掃除
@@ -69,9 +83,12 @@ exports.notifyOnNewRecord = functions.database
       response.responses.forEach((resp, idx) => {
         if (!resp.success) {
           const err = resp.error;
+          console.warn(`Token ${idx} failed:`, err && err.code);
           if (
-            err.code === 'messaging/invalid-registration-token' ||
-            err.code === 'messaging/registration-token-not-registered'
+            err &&
+            (err.code === 'messaging/invalid-registration-token' ||
+              err.code === 'messaging/registration-token-not-registered' ||
+              err.code === 'messaging/invalid-argument')
           ) {
             tokensToRemove.push(tokens[idx]);
           }
@@ -80,14 +97,20 @@ exports.notifyOnNewRecord = functions.database
 
       if (tokensToRemove.length > 0) {
         const updates = {};
-        Object.entries(allTokens).forEach(([mid, tokensMap]) => {
-          Object.keys(tokensMap || {}).forEach(t => {
-            if (tokensToRemove.includes(t)) {
-              updates[`/tokens/${mid}/${t}`] = null;
-            }
-          });
+        tokensToRemove.forEach(token => {
+          updates[`/tokens/${token}`] = null;
         });
-        await admin.database().ref().update(updates);
+        // 旧仕様の同名トークンも掃除
+        Object.entries(allTokens).forEach(([key, value]) => {
+          if (value && typeof value === 'object' && value.memberId === undefined) {
+            Object.keys(value).forEach(t => {
+              if (tokensToRemove.includes(t)) {
+                updates[`/tokens/${key}/${t}`] = null;
+              }
+            });
+          }
+        });
+        await db.ref().update(updates);
         console.log(`Cleaned ${tokensToRemove.length} dead tokens.`);
       }
     } catch (e) {
@@ -95,4 +118,5 @@ exports.notifyOnNewRecord = functions.database
     }
 
     return null;
-  });
+  }
+);

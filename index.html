@@ -466,23 +466,76 @@ input, select, textarea { font-family: inherit; font-size: 16px; }
 .notif-status {
   display: flex; align-items: center; gap: 8px;
   font-size: 13px;
-  margin-bottom: 10px;
 }
 .notif-status .dot {
   width: 8px; height: 8px; border-radius: 50%;
   background: #ccc;
 }
 .notif-status.on .dot { background: #6bc78a; }
-.notif-btn {
+
+.notif-picker-label {
+  font-size: 13px; color: var(--text-light);
+  margin: 8px 0 6px;
+  font-weight: 600;
+}
+.notif-tabs {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin-bottom: 10px;
+}
+.notif-tab {
+  padding: 8px 14px;
+  background: var(--bg);
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  transition: all 0.15s;
+}
+.notif-tab.active {
+  background: linear-gradient(135deg, var(--pink) 0%, var(--pink-deep) 100%);
+  color: white;
+  border-color: transparent;
+}
+.notif-btn-primary {
+  width: 100%;
+  padding: 12px;
+  background: linear-gradient(135deg, var(--pink) 0%, var(--pink-deep) 100%);
+  color: white;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 14px;
+  box-shadow: var(--shadow-soft);
+  margin-bottom: 6px;
+}
+.notif-btn-primary:active { transform: scale(0.98); }
+.notif-btn-secondary {
   width: 100%;
   padding: 10px;
   background: white;
-  border: 1px solid var(--pink);
-  color: var(--pink-deep);
-  border-radius: 10px;
-  font-weight: 600;
-  font-size: 14px;
+  color: var(--text-light);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 13px;
 }
+
+.device-group {
+  background: var(--bg);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+}
+.device-group-name {
+  font-weight: 600; font-size: 13px;
+  color: var(--pink-deep);
+  margin-bottom: 4px;
+}
+.device-item {
+  display: flex; justify-content: space-between;
+  font-size: 12px; color: var(--text);
+  padding: 4px 0;
+}
+.device-meta { color: var(--text-light); font-size: 11px; }
 
 /* マニュアル */
 details {
@@ -664,9 +717,18 @@ details ul { padding-left: 20px; }
           <span class="dot"></span>
           <span id="notifStatusText">通知はオフです</span>
         </div>
-        <button class="notif-btn" id="enableNotifBtn">通知を有効にする</button>
       </div>
-      <p style="font-size:12px;color:var(--text-light);margin:0">他のメンバーがボタンを押すと、こちらに通知が届きます。</p>
+      <div id="notifMemberPicker"></div>
+      <div id="notifDeviceList"></div>
+      <details style="margin-top:12px">
+        <summary>📱 iPhoneで通知が来ないとき</summary>
+        <ul>
+          <li><b>必ずホーム画面に追加</b>してアプリとして開く（Safariのままでは届きません）</li>
+          <li>共有ボタン → 「ホーム画面に追加」</li>
+          <li>ホーム画面のアイコンから起動 → 「通知を有効にする」</li>
+          <li>iOS 16.4以降が必要</li>
+        </ul>
+      </details>
     </div>
 
     <div class="card">
