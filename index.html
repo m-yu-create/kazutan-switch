@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>かずたんすいっち</title>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#f7b2c4">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="すいっち">
+<link rel="icon" type="image/png" href="favicon.png">
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700&family=Klee+One:wght@400;600&display=swap" rel="stylesheet">
+
+<style>
+:root {
+  --bg: #fef6f9;
+  --bg-2: #f3f9fd;
+  --card: #ffffff;
+  --pink: #f7b2c4;
+  --pink-deep: #e88aa1;
+  --pink-soft: #fde4ec;
+  --blue: #b8d8ec;
+  --blue-deep: #88b6d2;
+  --blue-soft: #e0eef8;
+  --mint: #c5e8d4;
+  --yellow: #fce8a8;
+  --lavender: #d8c8e8;
+  --text: #5a4a55;
+  --text-light: #8b7a85;
+  --border: #f0e0e8;
+  --shadow: 0 4px 16px rgba(232, 138, 161, 0.12);
+  --shadow-soft: 0 2px 8px rgba(180, 160, 180, 0.08);
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  margin: 0; padding: 0;
+  font-family: 'Zen Maru Gothic', sans-serif;
+  background: linear-gradient(135deg, var(--bg) 0%, var(--bg-2) 100%);
+  color: var(--text);
+  min-height: 100vh;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+button { font-family: inherit; cursor: pointer; border: none; outline: none; }
+input, select, textarea { font-family: inherit; font-size: 16px; }
+
+/* ===== ロック画面 ===== */
+.lock-screen {
+  position: fixed; inset: 0;
+  background: linear-gradient(135deg, var(--pink-soft) 0%, var(--blue-soft) 100%);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  z-index: 9999;
+  padding: 20px;
+}
+.lock-screen.hidden { display: none; }
+.lock-emoji { font-size: 64px; margin-bottom: 16px; animation: bounce 2s infinite; }
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+.lock-title {
+  font-family: 'Klee One', serif;
+  font-size: 28px; font-weight: 600;
+  color: var(--pink-deep);
+  margin: 0 0 8px;
+}
+.lock-sub {
+  font-size: 14px; color: var(--text-light);
+  margin: 0 0 32px;
+}
+.lock-input-wrap {
+  background: white;
+  border-radius: 24px;
+  padding: 24px;
+  box-shadow: var(--shadow);
+  width: 100%; max-width: 320px;
+}
+.lock-label { font-size: 14px; color: var(--text-light); margin-bottom: 8px; }
+#greetingText {
+  width: 100%;
+  padding: 14px 16px;
+  border: 2px solid var(--pink-soft);
+  border-radius: 16px;
+  font-size: 18px;
+  text-align: center;
+  background: var(--bg);
+  transition: border-color 0.2s;
+}
+#greetingText:focus { border-color: var(--pink); }
+.lock-btn {
+  width: 100%;
+  margin-top: 12px;
+  padding: 14px;
+  background: linear-gradient(135deg, var(--pink) 0%, var(--pink-deep) 100%);
+  color: white;
+  border-radius: 16px;
+  font-size: 16px;
+  font-weight: 700;
+  box-shadow: var(--shadow);
+  transition: transform 0.1s;
+}
+.lock-btn:active { transform: scale(0.97); }
+.lock-error { color: #d65a7a; font-size: 13px; margin-top: 8px; text-align: center; min-height: 18px; }
+
+/* ===== ヘッダー ===== */
+.app-header {
+  background: linear-gradient(135deg, #ffffff 0%, var(--pink-soft) 100%);
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 100;
+  backdrop-filter: blur(10px);
+}
+.app-title {
+  font-family: 'Klee One', serif;
+  font-size: 22px; font-weight: 600;
+  color: var(--pink-deep);
+  margin: 0; text-align: center;
+  letter-spacing: 0.05em;
+}
+.app-sub { font-size: 11px; color: var(--text-light); text-align: center; margin: 2px 0 0; }
+
+/* ===== タブ ===== */
+.tabs {
+  display: flex; gap: 4px;
+  background: white;
+  padding: 6px;
+  border-radius: 20px;
+  margin: 14px 16px 0;
+  box-shadow: var(--shadow-soft);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.tab {
+  flex: 1;
+  padding: 10px 8px;
+  background: transparent;
+  color: var(--text-light);
+  border-radius: 14px;
+  font-size: 13px; font-weight: 500;
+  white-space: nowrap;
+  transition: all 0.2s;
+  min-width: 60px;
+}
+.tab.active {
+  background: linear-gradient(135deg, var(--pink) 0%, var(--pink-deep) 100%);
+  color: white;
+  box-shadow: var(--shadow);
+}
+
+/* ===== コンテンツ ===== */
+.content { padding: 16px; padding-bottom: 80px; }
+.section { display: none; }
+.section.active { display: block; animation: fadeIn 0.3s; }
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.card {
+  background: var(--card);
+  border-radius: 20px;
+  padding: 18px;
+  box-shadow: var(--shadow-soft);
+  margin-bottom: 14px;
+  border: 1px solid var(--border);
+}
+.card-title {
+  font-family: 'Klee One', serif;
+  font-size: 16px; font-weight: 600;
+  color: var(--pink-deep);
+  margin: 0 0 12px;
+  display: flex; align-items: center; gap: 6px;
+}
+
+/* ===== 送信ボタン ===== */
+.sender-info {
+  background: linear-gradient(135deg, var(--pink-soft) 0%, var(--blue-soft) 100%);
+  border-radius: 16px;
+  padding: 12px 16px;
+  margin-bottom: 14px;
+  text-align: center;
+  font-size: 14px;
+}
+.sender-info .label { color: var(--text-light); font-size: 12px; }
+.sender-info .name { font-weight: 700; color: var(--pink-deep); }
+.sender-info select {
+  background: white; border: 1px solid var(--border);
+  border-radius: 10px; padding: 6px 10px;
+  margin-left: 6px; font-size: 14px;
+}
+
+.btn-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+.switch-btn {
+  background: white;
+  border: 2px solid var(--pink-soft);
+  border-radius: 24px;
+  padding: 24px 12px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 8px;
+  box-shadow: var(--shadow-soft);
+  transition: all 0.15s;
+  min-height: 120px;
+  position: relative;
+  overflow: hidden;
+}
+.switch-btn::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(135deg, transparent 0%, var(--pink-soft) 100%);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.switch-btn:active {
+  transform: scale(0.95);
+  border-color: var(--pink);
+  box-shadow: var(--shadow);
+}
+.switch-btn:active::before { opacity: 0.6; }
+.switch-btn.sending {
+  animation: pulse 0.6s;
+  border-color: var(--pink-deep);
+}
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); box-shadow: 0 0 0 8px rgba(247,178,196,0.3); }
+}
+.switch-btn-emoji { font-size: 40px; line-height: 1; position: relative; z-index: 1; }
+.switch-btn-label {
+  font-family: 'Klee One', serif;
+  font-size: 15px; font-weight: 600;
+  color: var(--text);
+  position: relative; z-index: 1;
+}
+
+/* ===== トースト ===== */
+.toast {
+  position: fixed; bottom: 30px; left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  background: linear-gradient(135deg, var(--pink) 0%, var(--pink-deep) 100%);
+  color: white;
+  padding: 12px 24px;
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+  z-index: 1000;
+  transition: transform 0.3s;
+  font-size: 14px; font-weight: 600;
+  white-space: nowrap;
+}
+.toast.show { transform: translateX(-50%) translateY(0); }
+
+/* ===== 履歴 ===== */
+.history-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px;
+  background: var(--bg);
+  border-radius: 14px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+}
+.history-emoji { font-size: 28px; }
+.history-info { flex: 1; min-width: 0; }
+.history-line1 { font-size: 14px; font-weight: 600; }
+.history-line2 { font-size: 11px; color: var(--text-light); margin-top: 2px; }
+.history-actions { display: flex; gap: 4px; }
+.icon-btn {
+  width: 32px; height: 32px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+}
+.icon-btn:active { background: var(--pink-soft); }
+.empty-msg {
+  text-align: center;
+  color: var(--text-light);
+  padding: 28px;
+  font-size: 14px;
+}
+.filter-bar {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.filter-bar select {
+  flex: 1; min-width: 100px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: white;
+  font-size: 13px;
+}
+
+/* ===== ボタン管理 ===== */
+.btn-list-item, .member-list-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px;
+  background: var(--bg);
+  border-radius: 12px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+}
+.btn-list-emoji, .member-list-emoji { font-size: 24px; }
+.btn-list-name, .member-list-name { flex: 1; font-weight: 600; font-size: 14px; }
+
+.input-row {
+  display: flex; gap: 8px; margin-bottom: 8px;
+}
+.input-row input[type="text"] {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: white;
+}
+.emoji-picker-btn {
+  width: 48px; height: 44px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 22px;
+}
+.add-btn {
+  width: 100%;
+  padding: 12px;
+  background: linear-gradient(135deg, var(--pink) 0%, var(--pink-deep) 100%);
+  color: white;
+  border-radius: 12px;
+  font-weight: 700;
+  box-shadow: var(--shadow-soft);
+}
+.add-btn:active { transform: scale(0.98); }
+
+/* ===== 絵文字ピッカー ===== */
+.emoji-picker {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: none; align-items: flex-end;
+  z-index: 2000;
+}
+.emoji-picker.show { display: flex; }
+.emoji-picker-content {
+  background: white;
+  width: 100%;
+  border-radius: 24px 24px 0 0;
+  padding: 20px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.emoji-picker-title {
+  font-family: 'Klee One', serif;
+  font-weight: 600;
+  text-align: center;
+  margin: 0 0 12px;
+  color: var(--pink-deep);
+}
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+}
+.emoji-grid button {
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 22px;
+  aspect-ratio: 1;
+}
+.emoji-grid button:active { background: var(--pink-soft); }
+
+/* ===== 分析 ===== */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.stat-box {
+  background: linear-gradient(135deg, var(--pink-soft) 0%, var(--blue-soft) 100%);
+  border-radius: 14px;
+  padding: 12px;
+  text-align: center;
+}
+.stat-num { font-size: 22px; font-weight: 700; color: var(--pink-deep); }
+.stat-lbl { font-size: 11px; color: var(--text-light); }
+
+.bar-chart { margin-top: 8px; }
+.bar-row {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+.bar-label { width: 70px; flex-shrink: 0; }
+.bar-track {
+  flex: 1;
+  height: 22px;
+  background: var(--bg);
+  border-radius: 11px;
+  overflow: hidden;
+  position: relative;
+}
+.bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--pink) 0%, var(--pink-deep) 100%);
+  border-radius: 11px;
+  transition: width 0.3s;
+}
+.bar-num {
+  position: absolute; right: 8px; top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px; font-weight: 700;
+  color: var(--text);
+}
+
+/* カレンダー */
+.cal-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 8px;
+}
+.cal-nav { background: var(--bg); border-radius: 8px; padding: 6px 12px; font-size: 14px; }
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+.cal-cell {
+  aspect-ratio: 1;
+  background: var(--bg);
+  border-radius: 8px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  font-size: 11px;
+  position: relative;
+}
+.cal-cell.empty { background: transparent; }
+.cal-cell.has { background: linear-gradient(135deg, var(--pink-soft) 0%, var(--pink) 100%); color: white; font-weight: 700; }
+.cal-cell .count {
+  position: absolute; bottom: 2px; right: 4px;
+  font-size: 9px; opacity: 0.8;
+}
+.cal-cell.head { background: transparent; color: var(--text-light); font-size: 10px; }
+
+/* 通知 */
+.notif-card {
+  background: linear-gradient(135deg, var(--blue-soft) 0%, var(--pink-soft) 100%);
+  border-radius: 16px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+.notif-status {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+.notif-status .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #ccc;
+}
+.notif-status.on .dot { background: #6bc78a; }
+.notif-btn {
+  width: 100%;
+  padding: 10px;
+  background: white;
+  border: 1px solid var(--pink);
+  color: var(--pink-deep);
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* マニュアル */
+details {
+  background: var(--bg);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+}
+details summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--pink-deep);
+  list-style: none;
+  display: flex; justify-content: space-between;
+  font-size: 14px;
+}
+details summary::after { content: '+'; transition: transform 0.2s; }
+details[open] summary::after { transform: rotate(45deg); }
+details p, details ul { font-size: 13px; line-height: 1.7; margin: 8px 0 0; }
+details ul { padding-left: 20px; }
+
+/* モーダル */
+.modal {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: none; align-items: center; justify-content: center;
+  z-index: 3000;
+  padding: 20px;
+}
+.modal.show { display: flex; }
+.modal-box {
+  background: white;
+  border-radius: 20px;
+  padding: 24px;
+  width: 100%; max-width: 360px;
+}
+.modal-title {
+  font-family: 'Klee One', serif;
+  font-size: 18px; font-weight: 600;
+  color: var(--pink-deep);
+  margin: 0 0 14px;
+}
+.modal label { display: block; font-size: 13px; margin: 10px 0 4px; color: var(--text-light); }
+.modal input, .modal select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+}
+.modal-actions { display: flex; gap: 8px; margin-top: 18px; }
+.modal-actions button { flex: 1; padding: 12px; border-radius: 12px; font-weight: 600; }
+.btn-cancel { background: var(--bg); color: var(--text); }
+.btn-confirm { background: linear-gradient(135deg, var(--pink) 0%, var(--pink-deep) 100%); color: white; }
+.btn-danger { background: #f0a4a4; color: white; }
+
+.danger-zone {
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px dashed #f0a4a4;
+  border-radius: 12px;
+}
+.danger-zone-title { font-size: 13px; color: #d65a7a; margin: 0 0 8px; }
+</style>
+</head>
+<body>
+
+<!-- ロック画面 -->
+<div class="lock-screen" id="lockScreen">
+  <div class="lock-emoji">💕</div>
+  <h1 class="lock-title">かずたんすいっち</h1>
+  <p class="lock-sub">あいことばを入れてね</p>
+  <div class="lock-input-wrap">
+    <div class="lock-label">あいことば</div>
+    <input type="text" id="greetingText" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+    <button class="lock-btn" id="unlockBtn">ひらく</button>
+    <div class="lock-error" id="lockError"></div>
+  </div>
+</div>
+
+<!-- ヘッダー -->
+<div class="app-header" id="appHeader" style="display:none">
+  <h1 class="app-title">💕 かずたんすいっち 💕</h1>
+  <p class="app-sub">ぽちっとして気持ちを送ろう</p>
+  <div class="tabs">
+    <button class="tab active" data-tab="send">すいっち</button>
+    <button class="tab" data-tab="history">りれき</button>
+    <button class="tab" data-tab="analytics">ぶんせき</button>
+    <button class="tab" data-tab="manage">かんり</button>
+  </div>
+</div>
+
+<!-- メインコンテンツ -->
+<div class="content" id="appContent" style="display:none">
+
+  <!-- すいっちタブ -->
+  <div class="section active" id="section-send">
+    <div class="sender-info">
+      <span class="label">いまのきもちを送るのは</span><br>
+      <span class="name" id="currentSenderName">─</span>
+      <select id="senderSelect"></select>
+    </div>
+    <div class="btn-grid" id="switchGrid"></div>
+  </div>
+
+  <!-- りれきタブ -->
+  <div class="section" id="section-history">
+    <div class="card">
+      <h2 class="card-title">📜 りれき</h2>
+      <div class="filter-bar">
+        <select id="filterMember"><option value="">ぜんいん</option></select>
+        <select id="filterButton"><option value="">すべてのきもち</option></select>
+      </div>
+      <div id="historyList"></div>
+    </div>
+  </div>
+
+  <!-- ぶんせきタブ -->
+  <div class="section" id="section-analytics">
+    <div class="card">
+      <h2 class="card-title">📊 ぜんたいのようす</h2>
+      <div class="stats-grid" id="statsGrid"></div>
+    </div>
+    <div class="card">
+      <h2 class="card-title">⏰ じかんたい</h2>
+      <div class="bar-chart" id="hourChart"></div>
+    </div>
+    <div class="card">
+      <h2 class="card-title">📅 ようび</h2>
+      <div class="bar-chart" id="dayChart"></div>
+    </div>
+    <div class="card">
+      <h2 class="card-title">💝 きもちランキング</h2>
+      <div class="bar-chart" id="buttonChart"></div>
+    </div>
+    <div class="card">
+      <h2 class="card-title">🗓️ カレンダー</h2>
+      <div class="cal-header">
+        <button class="cal-nav" id="calPrev">◀</button>
+        <div id="calMonth" style="font-weight:700;font-family:'Klee One',serif"></div>
+        <button class="cal-nav" id="calNext">▶</button>
+      </div>
+      <div class="cal-grid" id="calGrid"></div>
+    </div>
+    <div class="card">
+      <h2 class="card-title">🔗 くみあわせ</h2>
+      <p style="font-size:12px;color:var(--text-light);margin:0 0 8px">同じ日に一緒に押された組み合わせ</p>
+      <div id="comboList"></div>
+    </div>
+  </div>
+
+  <!-- かんりタブ -->
+  <div class="section" id="section-manage">
+    <div class="card">
+      <h2 class="card-title">👥 メンバー</h2>
+      <div id="memberList"></div>
+      <div class="input-row">
+        <button type="button" class="emoji-picker-btn" id="newMemberEmojiBtn">😊</button>
+        <input type="text" id="newMemberName" placeholder="なまえ" maxlength="20">
+      </div>
+      <button class="add-btn" id="addMemberBtn">+ メンバーを追加</button>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">🎀 ボタン</h2>
+      <div id="buttonList"></div>
+      <div class="input-row">
+        <button type="button" class="emoji-picker-btn" id="newButtonEmojiBtn">💕</button>
+        <input type="text" id="newButtonLabel" placeholder="ボタンの名前" maxlength="20">
+      </div>
+      <button class="add-btn" id="addButtonBtn">+ ボタンを追加</button>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">🔔 つうち</h2>
+      <div class="notif-card">
+        <div class="notif-status" id="notifStatus">
+          <span class="dot"></span>
+          <span id="notifStatusText">通知はオフです</span>
+        </div>
+        <button class="notif-btn" id="enableNotifBtn">通知を有効にする</button>
+      </div>
+      <p style="font-size:12px;color:var(--text-light);margin:0">他のメンバーがボタンを押すと、こちらに通知が届きます。</p>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">📖 つかいかた</h2>
+      <details>
+        <summary>基本のつかいかた</summary>
+        <p>「すいっち」タブで自分の名前を選んで、ボタンを押すだけ。相手に通知が届きます。</p>
+      </details>
+      <details>
+        <summary>ボタンを増やしたい</summary>
+        <p>「かんり」タブの「ボタン」から、好きな絵文字と名前で追加できます。</p>
+      </details>
+      <details>
+        <summary>履歴を直したい</summary>
+        <p>「りれき」タブで各履歴の右側にあるアイコンから編集・削除できます。</p>
+      </details>
+      <details>
+        <summary>通知が来ない</summary>
+        <ul>
+          <li>「かんり」タブの通知を有効にしているか確認</li>
+          <li>iPhoneの場合はホーム画面に追加したアプリから開く</li>
+          <li>ブラウザの通知許可がオンか確認</li>
+        </ul>
+      </details>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title">⚙️ そのた</h2>
+      <details>
+        <summary>仕様</summary>
+        <ul>
+          <li>ホスティング: GitHub Pages</li>
+          <li>データ: Firebase Realtime Database</li>
+          <li>通知: Firebase Cloud Messaging</li>
+          <li>あいことば: みちくん</li>
+        </ul>
+      </details>
+      <div class="danger-zone">
+        <p class="danger-zone-title">⚠ 注意ゾーン</p>
+        <button class="add-btn" style="background:#f0a4a4" id="logoutBtn">ロックする</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- 絵文字ピッカー -->
+<div class="emoji-picker" id="emojiPicker">
+  <div class="emoji-picker-content">
+    <p class="emoji-picker-title">えもじをえらぶ</p>
+    <div class="emoji-grid" id="emojiGrid"></div>
+  </div>
+</div>
+
+<!-- 編集モーダル -->
+<div class="modal" id="editModal">
+  <div class="modal-box">
+    <h3 class="modal-title">📝 へんしゅう</h3>
+    <label>メンバー</label>
+    <select id="editMember"></select>
+    <label>きもち</label>
+    <select id="editButton"></select>
+    <label>にちじ</label>
+    <input type="datetime-local" id="editDatetime">
+    <div class="modal-actions">
+      <button class="btn-cancel" id="editCancel">やめる</button>
+      <button class="btn-confirm" id="editSave">ほぞん</button>
+    </div>
+  </div>
+</div>
+
+<!-- 削除確認モーダル -->
+<div class="modal" id="deleteModal">
+  <div class="modal-box">
+    <h3 class="modal-title">🗑️ さくじょ</h3>
+    <p>この履歴を削除しますか？</p>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="deleteCancel">やめる</button>
+      <button class="btn-danger" id="deleteConfirm">けす</button>
+    </div>
+  </div>
+</div>
+
+<!-- メンバー削除確認 -->
+<div class="modal" id="memberDeleteModal">
+  <div class="modal-box">
+    <h3 class="modal-title">🗑️ メンバー削除</h3>
+    <p id="memberDeleteText"></p>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="memberDeleteCancel">やめる</button>
+      <button class="btn-danger" id="memberDeleteConfirm">けす</button>
+    </div>
+  </div>
+</div>
+
+<!-- ボタン削除確認 -->
+<div class="modal" id="buttonDeleteModal">
+  <div class="modal-box">
+    <h3 class="modal-title">🗑️ ボタン削除</h3>
+    <p id="buttonDeleteText"></p>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="buttonDeleteCancel">やめる</button>
+      <button class="btn-danger" id="buttonDeleteConfirm">けす</button>
+    </div>
+  </div>
+</div>
+
+<!-- トースト -->
+<div class="toast" id="toast"></div>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+
+<script src="app.js"></script>
+
+</body>
+</html>
