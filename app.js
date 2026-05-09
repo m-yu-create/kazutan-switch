@@ -733,7 +733,7 @@ function saveLocalNotifMemberId(mid) {
 // トークンを取得して登録（自動更新も兼ねる）
 async function registerToken(memberId, silent = false) {
   if (!messaging) {
-    if (!silent) showToast('このブラウザは通知非対応');
+    if (!silent) showToast('FCM初期化失敗', 5000);
     return null;
   }
   if (Notification.permission !== 'granted') {
@@ -741,8 +741,22 @@ async function registerToken(memberId, silent = false) {
     return null;
   }
   try {
-    const token = await messaging.getToken({ vapidKey: VAPID_KEY });
-    if (!token) return null;
+    // Service Workerが登録されているか確認
+    let swReg = null;
+    if ('serviceWorker' in navigator) {
+      swReg = await navigator.serviceWorker.ready;
+      console.log('SW ready:', swReg);
+    }
+
+    const token = await messaging.getToken({
+      vapidKey: VAPID_KEY,
+      serviceWorkerRegistration: swReg,
+    });
+
+    if (!token) {
+      if (!silent) showToast('トークン取得失敗(空)', 5000);
+      return null;
+    }
 
     // 古いトークン（同じ端末で別メンバーに紐づいてた場合）を削除
     const oldToken = getLocalToken();
@@ -766,7 +780,16 @@ async function registerToken(memberId, silent = false) {
     return token;
   } catch (e) {
     console.error('registerToken error:', e);
-    if (!silent) showToast('通知登録エラー');
+    // エラー詳細を表示（iPhoneでデバッグするため）
+    const errMsg = e?.code || e?.message || String(e);
+    if (!silent) {
+      showToast(`エラー: ${errMsg.slice(0, 60)}`, 8000);
+      // 詳細はステータス欄にも出す
+      const text = document.getElementById('notifStatusText');
+      if (text) {
+        text.textContent = `❌ ${errMsg.slice(0, 100)}`;
+      }
+    }
     return null;
   }
 }
@@ -934,9 +957,13 @@ if (messaging) {
 
 // Service Worker 登録
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('firebase-messaging-sw.js').catch(err => {
-    console.warn('SW登録失敗:', err);
-  });
+  navigator.serviceWorker.register('firebase-messaging-sw.js', { scope: './' })
+    .then(reg => {
+      console.log('SW registered:', reg.scope);
+    })
+    .catch(err => {
+      console.warn('SW登録失敗:', err);
+    });
 }
 
 // ===========================
